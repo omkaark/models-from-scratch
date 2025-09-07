@@ -1,0 +1,106 @@
+[STEM]
+gelu(conv2d) => patch_embed.0.reparam_conv.weight, patch_embed.0.reparam_conv.bias => stride=2, padding=1, groups=1, dilation=1
+gelu(conv2d) => patch_embed.1.reparam_conv.weight, patch_embed.1.reparam_conv.bias => stride=2, padding=1, groups=96, dilation=1
+gelu(conv2d) => patch_embed.2.reparam_conv.weight, patch_embed.2.reparam_conv.bias => stride=1, padding=0, groups=1, dilation=1
+
+[STAGE 1]
+for i in range(2)
+    [RepMixer]
+    conv2d => network.0.{i}.token_mixer.reparam_conv.weight, network.0.{i}.token_mixer.reparam_conv.bias => stride=1, padding=1, groups=96, dilation=1
+
+    [ConvFFN]
+    conv2d => network.0.{i}.convffn.conv.conv.weight => stride=1, padding=3, groups=96, dilation=1
+    batch_norm => network.0.{i}.convffn.conv.bn.running_mean, network.0.{i}.convffn.conv.bn.running_var, network.0.{i}.convffn.conv.bn.weight, network.0.{i}.convffn.conv.bn.bias
+    gelu(conv2d) => network.0.{i}.convffn.fc1.weight, network.0.{i}.convffn.fc1.bias => stride=1, padding=0, groups=1, dilation=1
+    conv2d => network.0.{i}.convffn.fc2.weight, network.0.{i}.convffn.fc2.bias => stride=1, padding=0, groups=1, dilation=1
+    residual => x += model.network.0.{i}.layer_scale * conv
+
+[PATCH EMBED]
+gelu(conv2d) => network.1.proj.0.lkb_reparam.weight, network.1.proj.0.lkb_reparam.bias => stride=2, dilation=1, padding=3, groups=96
+gelu(conv2d) => network.1.proj.1.reparam_conv.weight, network.1.proj.1.reparam_conv.bias => stride=1, dilation=1, padding=0, groups=1
+
+[STAGE 2]
+for i in range(12)
+    [RepMixer]
+    conv2d => network.2.{i}.token_mixer.reparam_conv.weight, network.2.{i}.token_mixer.reparam_conv.bias => stride=1, padding=1, groups=192, dilation=1
+
+    [ConvFFN]
+    conv2d => network.2.{i}.convffn.conv.conv.weight => stride=1, padding=3, groups=192, dilation=1
+    batch_norm => network.2.{i}.convffn.conv.bn.running_mean, network.2.{i}.convffn.conv.bn.running_var, network.2.{i}.convffn.conv.bn.weight, network.2.{i}.convffn.conv.bn.bias
+    gelu(conv2d) => network.2.{i}.convffn.fc1.weight, network.2.{i}.convffn.fc1.bias => stride=1, padding=0, groups=1, dilation=1
+    conv2d => network.2.{i}.convffn.fc2.weight, network.2.{i}.convffn.fc2.bias => stride=1, padding=0, groups=1, dilation=1
+    residual => x += model.network.2.{i}.layer_scale * conv
+
+
+[PATCH EMBED]
+gelu(conv2d) => network.3.proj.0.lkb_reparam.weight, network.3.proj.0.lkb_reparam.bias => stride=2, padding=3, groups=192, dilation=1
+gelu(conv2d) => network.3.proj.1.reparam_conv.weight, network.3.proj.1.reparam_conv.bias => stride=1, padding=0, groups=1, dilation=1
+
+[STAGE 3]
+for i in range(24)
+    [RepMixer]
+    conv2d => network.4.{i}.token_mixer.reparam_conv.weight, network.4.{i}.token_mixer.reparam_conv.bias => stride=1, padding=1, groups=384, dilation=1
+
+    [ConvFFN]
+    conv2d => network.4.{i}.convffn.conv.conv.weight => stride=1, padding=3, groups=384, dilation=1
+    batch_norm => network.4.{i}.convffn.conv.bn.running_mean, network.4.{i}.convffn.conv.bn.running_var, network.4.{i}.convffn.conv.bn.weight, network.4.{i}.convffn.conv.bn.bias
+    gelu(conv2d) => network.4.{i}.convffn.fc1.weight, network.4.{i}.convffn.fc1.bias => stride=1, padding=0, groups=1, dilation=1
+    conv2d => network.4.{i}.convffn.fc2.weight, network.4.{i}.convffn.fc2.bias => stride=1, padding=0, groups=1, dilation=1
+    residual => x += model.network.4.{i}.layer_scale * conv
+
+[PATCH EMBED]
+gelu(conv2d) => network.5.proj.0.lkb_reparam.weight, network.5.proj.0.lkb_reparam.bias => stride=2, padding=3, groups=384, dilation=1
+gelu(conv2d) => network.5.proj.1.reparam_conv.weight, network.5.proj.1.reparam_conv.bias => stride=1, padding=0, groups=1, dilation=1
+
+[STAGE 4]
+[CONDITIONAL POSITIONAL EMBEDDINGS]
+conv2d => network.6.reparam_conv.weight, network.6.reparam_conv.bias => stride=1, padding=3, groups=768, dilation=1
+
+for i in range(4):
+    [ATTENTION]
+    layer_norm => network.7.{i}.norm.weight, network.7.{i}.norm.bias
+    attention => network.7.{i}.token_mixer.qkv.weight
+    linear => network.7.{i}.token_mixer.proj.weight, network.7.{i}.token_mixer.proj.bias
+    residual => x += network.{layer_idx}.{i}.layer_scale_1 * linear_o
+
+    [CONVFFN]
+    conv2d => network.7.{i}.convffn.conv.conv.weight => stride=1, padding=3, groups=768, dilation=1
+    batch_norm => network.7.{i}.convffn.conv.bn.running_mean, network.7.{i}.convffn.conv.bn.running_var, network.7.{i}.convffn.conv.bn.weight, network.7.{i}.convffn.conv.bn.bias
+    gelu(conv2d) => network.7.{i}.convffn.fc1.weight => stride=1, padding=0, groups=1, dilation=1
+    conv2d => network.7.{i}.convffn.fc2.weight => stride=1, padding=0, groups=1, dilation=1
+    residual => x += network.{layer_idx}.{i}.layer_scale_2 * conv
+
+[PATCH EMBED]
+gelu(conv2d) => network.8.proj.0.lkb_reparam.weight, network.8.proj.0.lkb_reparam.bias => stride=2, padding=3, dilation=1, groups=768
+gelu(conv2d) => network.8.proj.1.reparam_conv.weight, network.8.proj.1.reparam_conv.bias => stride=1, padding=0, dilation=1, groups=1
+
+[STAGE 5]
+[CONDITIONAL POSITIONAL EMBEDDINGS]
+conv2d => model.network.9.reparam_conv.weight, model.network.9.reparam_conv.bias => stride=1, padding=3, groups=1536, dilation=1
+
+for i in range(2):
+    [ATTENTION]
+    layer_norm => network.10.{i}.norm.weight, network.10.{i}.norm.bias
+    attention => network.10.{i}.token_mixer.qkv.weight
+    linear => network.10.{i}.token_mixer.proj.weight, network.10.{i}.token_mixer.proj.bias
+    residual => x += network.{layer_idx}.{i}.layer_scale_1 * linear_o
+
+    [CONVFFN]
+    conv2d => network.10.{i}.convffn.conv.conv.weight => stride=1, padding=3, groups=1536, dilation=1
+    batch_norm => network.10.{i}.convffn.conv.bn.running_mean, network.10.{i}.convffn.conv.bn.running_var, network.10.{i}.convffn.conv.bn.weight, network.10.{i}.convffn.conv.bn.bias
+    gelu(conv2d) => network.10.{i}.convffn.fc1.weight => stride=1, padding=0, groups=1, dilation=1
+    conv2d => network.10.{i}.convffn.fc2.weight => stride=1, padding=0, groups=1, dilation=1
+    residual => x += network.{layer_idx}.{i}.layer_scale_2 * conv
+
+[MOBILE BLOCK]
+conv2d => conv_exp.reparam_conv.weight, conv_exp.reparam_conv.bias => stride=1, padding=1, dilation=1, groups=1536
+
+[SQUEEZE AND EXCITE]
+avg_pool2d => (16, 16)
+relu(conv2d) => conv_exp.se.reduce.weight, conv_exp.se.reduce.bias => stride=1, padding=0, dilation=1, groups=1
+sigmoid(conv2d) => conv_exp.se.expand.weight, conv_exp.se.expand.bias => stride=1, padding=0, dilation=1, groups=1
+gelu => x * sigmoid_o
+
+[PROJECTOR]
+gelu(linear) => mm_projector.0.weight, mm_projector.0.bias
+linear => mm_projector.2.weight, mm_projector.2.bias
